@@ -20,3 +20,5 @@ class SynthState:
         
         #Parámetros del ruido que envuelve el pulsar
         self.noise_level = 0.5
+        
+        self.world_scale = 1.0

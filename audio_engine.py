@@ -50,15 +50,25 @@ class AudioEngine:
 
         carrier = freqs + 0.1 * excitation
 
-        #añadimos el ruido de fondo
-        noise_dust = make_noise_for_surrounding_enviroment(env, t)
-
-        noise_gain = self.state.noise_level * 5.0
-        noise_dust = noise_dust * noise_gain
-
-        # creamos la señal
-        signal = env * (carrier + noise_dust)
+        # core pulsar
+        signal_core = env * carrier
         
+        
+
+        # AÑADIMOS RUIDO DE FONDO DEL POLVO ESTELAR Y MODULACIONES DEL PULSAR
+        noise_dust = make_noise_for_surrounding_enviroment(t)
+
+        # modulación suave (no destructiva)
+        noise_dust *= (0.6 + 0.4 * env)
+
+        # gain global
+        noise_dust *= self.state.noise_level * 3.0
+
+        signal = signal_core + noise_dust
+        
+        signal = env * carrier
+        
+        #Ajustar tambien volumen de la senyal en base al punto de vista 
         signal *= 0.2 if self.state.view_intensity <= 0 else self.state.view_intensity
         
         return signal
