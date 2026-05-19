@@ -19,7 +19,7 @@ class AudioEngine:
         self.t0 += frames
         outdata[:] = res.reshape(-1, 1)
         
-    def generate_pulsar(self,t):
+    def generate_pulsar(self, t):
         
         f0 = self.state.f0
         f1 = self.state.f1
@@ -31,10 +31,10 @@ class AudioEngine:
         #TODO CREAR VARIEDAD EN LOS PULSOS SIMULANDO EL DESFASE ENTRE EJE MAGNETICO Y EJE DEL PULSAR . ASÍ COMO INTERFERENCIAS Y RUIDO
         
         beam = make_modulations_based_on_axis_rotation(self.state.magnetic_axis)
+        beam = np.clip(beam, 0.0, 1.0)
         
-        env = make_main_envelope(phase, self.sr,self.state.view_intensity,beam)
-        
-        env = np.clip(env, -1.0, 1.0)
+        env = make_main_envelope(phase, self.sr, self.state.view_intensity, beam)
+        env = np.clip(env, 0.0, 1.0)
         
         # BUILDING THE SOUND
 
@@ -59,18 +59,43 @@ class AudioEngine:
         # AÑADIMOS RUIDO DE FONDO DEL POLVO ESTELAR Y MODULACIONES DEL PULSAR
         noise_dust = make_noise_for_surrounding_enviroment(t)
 
-        # modificar ruido cuando el haz no esta alineado
-        noise_dust *= (1.0 - beam)
+        # el ruido SOLO reacciona al pulso, no al eje
+        pulse_activity = env ** 2
 
-        # modulación suave (no destructiva)
-        noise_dust *= (0.6 + 0.4 * env)
+        # modulación física: el pulso “excita” el medio
+        noise_dust *= (0.6 + 0.4 * pulse_activity)
 
-        # gain global
-        noise_dust *= self.state.noise_level * 3.0
+        # reverb natural del medio
+        decay = 0.7 + 0.3 * (1.0 - self.state.noise_level)
 
-        signal = signal_core + noise_dust
+        reverb = np.zeros_like(noise_dust)
+        delay = 180
+
+        for i in range(delay, len(noise_dust)):
+            reverb[i] = noise_dust[i] + decay * reverb[i - delay]
+
+        space_noise = noise_dust + 0.5 * reverb
+
+        # el ruido crece cuando NO hay pulso (vacío energético)
+        space_noise *= (1.0 + 0.5 * (1.0 - env))
         
-        signal = env * carrier
+        # añadir cambio e parametro en GUI
+        noise_gain = 1.4 * self.state.noise_level
+        space_noise *= noise_gain
+
+        # harmonic fog
+        fog = (
+            np.sin(2*np.pi*phase*0.5) +
+            0.5*np.sin(2*np.pi*phase*1.5) +
+            0.25*np.sin(2*np.pi*phase*3.7)
+        )
+        fog *= (1.0 - env)
+        fog *= 0.009
+        
+        #integrar ruido
+        signal = signal_core + space_noise + fog
+        
+        signal = np.tanh(signal)
         
         #Ajustar tambien volumen de la senyal en base al punto de vista 
         signal *= 0.2 if self.state.view_intensity <= 0 else self.state.view_intensity
