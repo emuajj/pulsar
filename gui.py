@@ -1,5 +1,6 @@
 import tkinter as tk
 import numpy as np
+import time
 from knob import Knob
 
 
@@ -10,8 +11,11 @@ class GUI:
         self.root = tk.Tk()
         self.root.title("Pulsar Synth")
 
+        # tiempo global para animaciones
+        self.t0 = time.time()
+
         # -------------------
-        # KNOB (F0)
+        # KNOB F0
         # -------------------
         self.k1 = Knob(
             self.root,
@@ -24,12 +28,38 @@ class GUI:
         self.k1.pack()
 
         # -------------------
-        # CANVAS 3D
+        # NOISE
+        # -------------------
+        self.k2 = Knob(
+            self.root,
+            min_val=0,
+            max_val=1,
+            value=state.noise_level,
+            label="Noise Level",
+            callback=self.set_noise_level
+        )
+        self.k2.pack()
+
+        # -------------------
+        # MAGNETIC TILT
+        # -------------------
+        self.k3 = Knob(
+            self.root,
+            min_val=0.0,
+            max_val=np.pi/2,
+            value=state.magnetic_tilt,
+            label="Magnetic Tilt",
+            callback=self.set_tilt
+        )
+        self.k3.pack()
+
+        # -------------------
+        # CANVAS
         # -------------------
         self.canvas = tk.Canvas(self.root, width=400, height=400, bg="black")
         self.canvas.pack()
 
-        # rotation user
+        # cámara
         self.angle_x = 0.0
         self.angle_y = 0.0
 
@@ -39,16 +69,32 @@ class GUI:
         self.canvas.bind("<ButtonPress-1>", self.on_down)
         self.canvas.bind("<B1-Motion>", self.on_drag)
 
+        self.running = True
+        self.animate()
+        
+    def animate(self):
+        if not self.running:
+            return
+
+        self.update_state()
         self.draw()
 
+        self.root.after(16, self.animate)  # ~60 FPS
+
     # -------------------
-    # KNOB
+    # CALLBACKS
     # -------------------
     def set_f0(self, v):
         self.state.f0 = v
 
+    def set_noise_level(self, v):
+        self.state.noise_level = v
+
+    def set_tilt(self, v):
+        self.state.magnetic_tilt = v
+
     # -------------------
-    # mouse control
+    # INPUT
     # -------------------
     def on_down(self, e):
         self.last_x = e.x
@@ -65,26 +111,23 @@ class GUI:
         self.last_y = e.y
 
         self.update_state()
-        self.draw()
 
     # -------------------
-    # ROTATION
+    # ROTATION 3D
     # -------------------
     def rotate(self, v):
         x, y, z = v
 
-        # Y
         cy, sy = np.cos(self.angle_y), np.sin(self.angle_y)
         x, z = cy*x + sy*z, -sy*x + cy*z
 
-        # X
         cx, sx = np.cos(self.angle_x), np.sin(self.angle_x)
         y, z = cx*y - sx*z, sx*y + cx*z
 
         return np.array([x, y, z])
 
     # -------------------
-    # PERSPECTIVE PROJECTION
+    # PROJECTION
     # -------------------
     def project(self, v):
         scale = 180
@@ -99,7 +142,7 @@ class GUI:
         return x, y
 
     # -------------------
-    # PHYSICS LINK (audio)
+    # PHYSICS LINK (intensity)
     # -------------------
     def update_state(self):
         L = 1.0
@@ -112,23 +155,25 @@ class GUI:
 
         visible_length = np.hypot(x2 - x1, y2 - y1)
 
-        max_len = 220.0  # tuning constant
-        intensity = visible_length / max_len
-
-        self.state.view_intensity = float(np.clip(intensity, 0.0, 1.0))
+        self.state.view_intensity = float(
+            np.clip(visible_length / 220.0, 0.0, 1.0)
+        )
 
     # -------------------
-    # DRAW SYSTEM
+    # DRAW
     # -------------------
     def draw(self):
         self.canvas.delete("all")
 
         L = 1.0
 
-        spin_p1 = np.array([0, 0, -L/2])
-        spin_p2 = np.array([0, 0,  L/2])
+        # -------------------
+        # EJES
+        # -------------------
+        spin_p1 = self.rotate(np.array([0, 0, -L/2]))
+        spin_p2 = self.rotate(np.array([0, 0,  L/2]))
 
-        tilt = 0.6
+        tilt = self.state.magnetic_tilt
 
         def mag(v):
             x, y, z = v
@@ -136,14 +181,8 @@ class GUI:
             y, z = cy*y - sy*z, sy*y + cy*z
             return np.array([x, y, z])
 
-        mag_p1 = mag(np.array([0, 0, -L/2]))
-        mag_p2 = mag(np.array([0, 0,  L/2]))
-
-        spin_p1 = self.rotate(spin_p1)
-        spin_p2 = self.rotate(spin_p2)
-
-        mag_p1 = self.rotate(mag_p1)
-        mag_p2 = self.rotate(mag_p2)
+        mag_p1 = self.rotate(mag(np.array([0, 0, -L/2])))
+        mag_p2 = self.rotate(mag(np.array([0, 0,  L/2])))
 
         x1, y1 = self.project(spin_p1)
         x2, y2 = self.project(spin_p2)
@@ -154,7 +193,36 @@ class GUI:
         self.canvas.create_line(x1, y1, x2, y2, fill="cyan", width=3)
         self.canvas.create_line(mx1, my1, mx2, my2, fill="orange", width=2)
 
+        # -------------------
+        # CENTRO
+        # -------------------
         self.canvas.create_oval(190, 190, 210, 210, outline="white")
+
+        # -------------------
+        # 🌌 OBJETO ORBITANTE
+        # -------------------
+        t = time.time() - self.t0
+
+        omega = 2 * np.pi * self.state.f0
+        theta = omega * t
+    
+        radius = 0.6
+
+        orbit_local = np.array([
+            radius * np.cos(theta),
+            radius * np.sin(theta),
+            0
+        ])
+
+        orbit_world = self.rotate(orbit_local)
+        x, y = self.project(orbit_world)
+
+        self.canvas.create_oval(
+            x - 4, y - 4,
+            x + 4, y + 4,
+            fill="white",
+            outline=""
+        )
 
     # -------------------
     def run(self):

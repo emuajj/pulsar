@@ -34,7 +34,6 @@ class AudioEngine:
         #TODO CREAR VARIEDAD EN LOS PULSOS SIMULANDO EL DESFASE ENTRE EJE MAGNETICO Y EJE DEL PULSAR . ASÍ COMO INTERFERENCIAS Y RUIDO
         
         
-        
         # BUILDING THE SOUND
 
         # añadimos sintesis para aconseguir musicalmente unos pulsos con frequencias
@@ -42,7 +41,8 @@ class AudioEngine:
             np.sin(2*np.pi*phase) +
             0.6*np.sin(2*np.pi*2.7*phase) +
             0.4*np.sin(2*np.pi*5.3*phase) +
-            0.2*np.sin(2*np.pi*8.1*phase)
+            0.2*np.sin(2*np.pi*8.1*phase) +
+            1*np.sin(2*np.pi*9*phase)
         )
 
         excitation = np.random.randn(len(t))
@@ -51,11 +51,15 @@ class AudioEngine:
         carrier = freqs + 0.1 * excitation
 
         #añadimos el ruido de fondo
-        noise_dust = make_noise_for_surrounding_enviroment(env,t)
-        noise_dust *= 4
+        noise_dust = make_noise_for_surrounding_enviroment(env, t)
+
+        noise_gain = self.state.noise_level * 5.0
+        noise_dust = noise_dust * noise_gain
 
         # creamos la señal
-        signal = env * carrier + noise_dust * (0.3 + 0.7 * env)
+        signal = env * (carrier + noise_dust)
+        
+        signal *= 0.2 if self.state.view_intensity <= 0 else self.state.view_intensity
         
         return signal
 
@@ -66,6 +70,6 @@ class AudioEngine:
             blocksize=self.block,
             callback=self.callback
         ):
-            print("Running real-time synth...")
+            print("Running real-time synth...") 
             while True:
                 sd.sleep(1000)
