@@ -11,8 +11,10 @@ class GUI:
         self.root = tk.Tk()
         self.root.title("Pulsar Synth")
 
-        # tiempo global
         self.t0 = time.time()
+
+        # eje magnético
+        self.magnet_angle = 0.0
 
         # -------------------
         # KNOBS
@@ -67,11 +69,10 @@ class GUI:
         self.particles = []
         self.base_particles = 250
 
-        # loop
         self.animate()
 
     # -------------------
-    # STATE CALLBACKS
+    # CALLBACKS
     # -------------------
     def set_f0(self, v):
         self.state.f0 = v
@@ -100,7 +101,7 @@ class GUI:
         self.last_y = e.y
 
     # -------------------
-    # ROTATION
+    # ROTATION (CAMERA ONLY)
     # -------------------
     def rotate(self, v):
         x, y, z = v
@@ -112,6 +113,21 @@ class GUI:
         y, z = cx*y - sx*z, sx*y + cx*z
 
         return np.array([x, y, z])
+
+    # -------------------
+    # ROTATION AROUND AXIS (3D TRUE PHYSICS)
+    # -------------------
+    def rotate_around_axis(self, v, axis, angle):
+        axis = axis / (np.linalg.norm(axis) + 1e-8)
+
+        cos = np.cos(angle)
+        sin = np.sin(angle)
+
+        return (
+            v * cos +
+            np.cross(axis, v) * sin +
+            axis * np.dot(axis, v) * (1 - cos)
+        )
 
     # -------------------
     # PROJECTION
@@ -129,21 +145,24 @@ class GUI:
         return x, y
 
     # -------------------
-    # PARTICLES SYSTEM
+    # PARTICLES
     # -------------------
     def update_particles(self):
-        n = int(1 + self.base_particles * (self.state.noise_level))
+        n = int(1 + self.base_particles * self.state.noise_level)
 
         if len(self.particles) != n:
-            self.particles = []
-
-            for _ in range(n):
-                self.particles.append({
+            self.particles = [
+                {
                     "angle": np.random.uniform(0, 2*np.pi),
                     "radius": np.random.uniform(0.2, 0.9),
                     "speed": np.random.uniform(0.5, 1.5)
-                })
-                
+                }
+                for _ in range(n)
+            ]
+
+    # -------------------
+    # PHYSICS
+    # -------------------
     def update_state(self):
         L = 1.0
 
@@ -155,11 +174,8 @@ class GUI:
 
         visible_length = np.hypot(x2 - x1, y2 - y1)
 
-        # 🔥 FIX: normalización correcta con escala
         base_norm = 220.0
-        scale_factor = self.state.world_scale
-
-        norm = base_norm * scale_factor
+        norm = base_norm * self.state.world_scale
 
         self.state.view_intensity = float(
             np.clip(visible_length / norm, 0.0, 1.0)
@@ -169,27 +185,42 @@ class GUI:
     # LOOP
     # -------------------
     def animate(self):
+        self.magnet_angle += 2 * np.pi * self.state.f0 * 0.01
+
+        self.magnet_angle += 2 * np.pi * self.state.f0 * 0.01
+
+        self.state.magnetic_axis = self.magnetic_axis()
+
         self.update_particles()
         self.update_state()
         self.draw()
+
         self.root.after(16, self.animate)
+
+    # -------------------
+    # MAGNETIC AXIS (CORRECT PHYSICS)
+    # -------------------
+    def magnetic_axis(self):
+        tilt = self.state.magnetic_tilt
+
+        # eje spin (referencia)
+        spin_axis = np.array([0, 0, 1])
+
+        # eje magnético base inclinado
+        base = np.array([0, np.sin(tilt), np.cos(tilt)])
+
+        # precesión alrededor del eje spin
+        return self.rotate_around_axis(base, spin_axis, self.magnet_angle)
 
     # -------------------
     # DRAW
     # -------------------
     def draw(self):
         self.canvas.delete("all")
-        
-        tilt = self.state.magnetic_tilt
-        omega = 2 * np.pi * self.state.f0
 
-        def mag(v):
-            x, y, z = v
-            cy, sy = np.cos(tilt), np.sin(tilt)
-            y, z = cy*y - sy*z, sy*y + cy*z
-            return np.array([x, y, z])
-
-        # eje spin
+        # -------------------
+        # SPIN AXIS
+        # -------------------
         spin_p1 = self.rotate(np.array([0, 0, -0.5]))
         spin_p2 = self.rotate(np.array([0, 0,  0.5]))
 
@@ -198,9 +229,16 @@ class GUI:
 
         self.canvas.create_line(x1, y1, x2, y2, fill="cyan", width=3)
 
-        # eje magnético
-        mag_p1 = self.rotate(mag(np.array([0, 0, -0.5])))
-        mag_p2 = self.rotate(mag(np.array([0, 0,  0.5])))
+        # -------------------
+        # MAGNETIC AXIS (FIXED + VISIBLE ROTATION)
+        # -------------------
+        mag_dir = self.magnetic_axis()
+
+        mag_p1 = mag_dir * (-0.5)
+        mag_p2 = mag_dir * (0.5)
+
+        mag_p1 = self.rotate(mag_p1)
+        mag_p2 = self.rotate(mag_p2)
 
         mx1, my1 = self.project(mag_p1)
         mx2, my2 = self.project(mag_p2)
@@ -211,23 +249,21 @@ class GUI:
         self.canvas.create_oval(190, 190, 210, 210, outline="white")
 
         # -------------------
-        # MAGNETOSFERA (PARTÍCULAS)
+        # PARTICLES
         # -------------------
         for p in self.particles:
 
-            p["angle"] += omega * 0.01 * p["speed"]
+            p["angle"] += self.state.f0 * 0.01 * p["speed"]
 
-            theta = p["angle"]
-
-            orbit_local = np.array([
-                p["radius"] * np.cos(theta),
-                p["radius"] * np.sin(theta),
+            orbit = np.array([
+                p["radius"] * np.cos(p["angle"]),
+                p["radius"] * np.sin(p["angle"]),
                 0
             ])
 
-            orbit_world = self.rotate(orbit_local)
+            orbit = self.rotate(orbit)
 
-            x, y = self.project(orbit_world)
+            x, y = self.project(orbit)
 
             n = len(self.particles)
 

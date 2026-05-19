@@ -1,6 +1,6 @@
 import numpy as np
 import sounddevice as sd
-from pulsar import pulsar_phase,make_main_envelope,make_noise_for_surrounding_enviroment
+from pulsar import pulsar_phase,make_main_envelope,make_noise_for_surrounding_enviroment,make_modulations_based_on_axis_rotation
 
 
 
@@ -27,12 +27,14 @@ class AudioEngine:
         
         # CREATING THE PULSES
         phase = pulsar_phase(t, f0, f1, f2)
-        env = make_main_envelope(phase, self.sr,self.state.view_intensity)
-        
-        env = np.clip(env, -1.0, 1.0)
         
         #TODO CREAR VARIEDAD EN LOS PULSOS SIMULANDO EL DESFASE ENTRE EJE MAGNETICO Y EJE DEL PULSAR . ASÍ COMO INTERFERENCIAS Y RUIDO
         
+        beam = make_modulations_based_on_axis_rotation(self.state.magnetic_axis)
+        
+        env = make_main_envelope(phase, self.sr,self.state.view_intensity,beam)
+        
+        env = np.clip(env, -1.0, 1.0)
         
         # BUILDING THE SOUND
 
@@ -48,15 +50,17 @@ class AudioEngine:
         excitation = np.random.randn(len(t))
         excitation = np.convolve(excitation, np.ones(10)/10, mode='same')
 
-        carrier = freqs + 0.1 * excitation
+        carrier = freqs * (0.6 + 0.4 * beam) + 0.1 * excitation
 
         # core pulsar
         signal_core = env * carrier
         
-        
 
         # AÑADIMOS RUIDO DE FONDO DEL POLVO ESTELAR Y MODULACIONES DEL PULSAR
         noise_dust = make_noise_for_surrounding_enviroment(t)
+
+        # modificar ruido cuando el haz no esta alineado
+        noise_dust *= (1.0 - beam)
 
         # modulación suave (no destructiva)
         noise_dust *= (0.6 + 0.4 * env)
