@@ -68,3 +68,17 @@ class Knob(tk.Canvas):
             fill="white",
             font=("Arial", 10)
         )
+
+    def set(self, value):
+        value = max(self.min_val, min(self.max_val, value))
+        self.value = value
+
+        # actualizar UI (depende de cómo lo tengas implementado)
+        self.var.set(value)  # si usas tk.DoubleVar o IntVar
+
+        # refrescar dibujo si hay canvas
+        self.draw()
+
+        # opcional: disparar callback sin loop infinito
+        if self.callback:
+            self.callback(value)

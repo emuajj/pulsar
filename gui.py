@@ -60,6 +60,20 @@ class GUI:
         self.mode_button.pack()
 
         # -------------------
+        # Presets
+        # -------------------
+        self.preset_var = tk.StringVar(value="crab")
+
+        self.preset_menu = tk.OptionMenu(
+            self.root,
+            self.preset_var,
+            *["crab", "vela", "millisecond", "magnetar", "psr_b1919"],
+            command=self.apply_preset
+        )
+        self.preset_menu.pack()
+
+
+        # -------------------
         # CANVAS
         # -------------------
         self.canvas = tk.Canvas(self.root, width=400, height=400, bg="black")
@@ -100,6 +114,14 @@ class GUI:
             self.mode_button.config(text="Mode: Envelope")
         else:
             self.mode_button.config(text="Mode: Spectral")
+
+    def apply_preset(self, name):
+        self.state.load_preset(name)
+
+        # sincronizar UI
+        # self.k1.set(self.state.f0)
+        # self.k2.set(self.state.noise_level)
+        # self.k3.set(self.state.magnetic_tilt)
 
     # -------------------
     # INPUT
