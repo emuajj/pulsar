@@ -1,6 +1,6 @@
 import numpy as np
 import sounddevice as sd
-from pulsar import pulsar_phase,make_main_envelope,make_noise_for_surrounding_enviroment,make_modulations_based_on_axis_rotation
+from pulsar import pulsar_phase,make_main_envelope,make_noise_for_surrounding_enviroment,make_modulations_based_on_axis_rotation,make_sound_synthesis_for_pulses,make_sound_spectral_for_pulses
 
 
 
@@ -39,22 +39,11 @@ class AudioEngine:
         # BUILDING THE SOUND
 
         # añadimos sintesis para aconseguir musicalmente unos pulsos con frequencias
-        freqs = (
-            np.sin(2*np.pi*phase) +
-            0.6*np.sin(2*np.pi*2.7*phase) +
-            0.4*np.sin(2*np.pi*5.3*phase) +
-            0.2*np.sin(2*np.pi*8.1*phase) +
-            1*np.sin(2*np.pi*9*phase)
-        )
-
-        excitation = np.random.randn(len(t))
-        excitation = np.convolve(excitation, np.ones(10)/10, mode='same')
-
-        carrier = freqs * (0.6 + 0.4 * beam) + 0.1 * excitation
-
-        # core pulsar
-        signal_core = env * carrier
-        
+        mode = self.state.synthesis_mode
+        if(mode == 0):
+            signal_core = make_sound_synthesis_for_pulses(phase,t,beam,env)
+        else:
+            signal_core = make_sound_spectral_for_pulses(phase,t,beam,env)
 
         # AÑADIMOS RUIDO DE FONDO DEL POLVO ESTELAR Y MODULACIONES DEL PULSAR
         noise_dust = make_noise_for_surrounding_enviroment(t)

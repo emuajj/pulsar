@@ -73,3 +73,60 @@ def make_modulations_based_on_axis_rotation(magnetic_axis):
 
     beam = np.exp(-(angle / 0.5) ** 2)
     return beam
+
+
+def make_sound_synthesis_for_pulses(phase,t,beam,env):
+    # añadimos sintesis para aconseguir musicalmente unos pulsos con frequencias
+        freqs = (
+            np.sin(2*np.pi*phase) +
+            0.6*np.sin(2*np.pi*2.7*phase) +
+            0.4*np.sin(2*np.pi*5.3*phase) +
+            0.2*np.sin(2*np.pi*8.1*phase) +
+            1*np.sin(2*np.pi*9*phase)
+        )
+
+        excitation = np.random.randn(len(t))
+        excitation = np.convolve(excitation, np.ones(10)/10, mode='same')
+
+        carrier = freqs * (1.3 * beam) + 0.1 * excitation
+
+        # core pulsar
+        signal_core = env * carrier
+        
+        return signal_core * 1.2
+
+def make_sound_spectral_for_pulses(phase, t, beam, env):
+
+    harmonics = np.zeros_like(phase)
+
+    density = 20
+
+    instability = 1.0 - beam
+
+    for i in range(1, density):
+
+        jitter = 1.0 + np.random.randn() * 0.02 * instability
+
+        drift = 1.0 + 0.01 * instability * np.sin(phase * 2*np.pi*i)
+
+        amp = 1.0 / (i ** (1.1 + instability))
+
+        #añadimos la onda creada  a partir de jitter , con el drift y la amplificación
+        harmonics += amp * np.sin(
+            2*np.pi*i*jitter*drift*phase
+        )
+
+    # plasma excitation --> aplicamos cierta insetabilidad obteniendo valores random dentro de t i haciendo un convolve para crear una nueva onda
+    excitation = np.random.randn(len(t))
+    excitation = np.convolve(
+        excitation,
+        np.ones(6)/6,
+        mode='same'
+    )
+
+    # combinamos las ondas de los harmonicos con la excitación
+    spectral = harmonics + 0.08 * excitation
+
+    signal = env * spectral
+
+    return signal

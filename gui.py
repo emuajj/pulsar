@@ -50,6 +50,16 @@ class GUI:
         self.k3.pack()
 
         # -------------------
+        # Button
+        # -------------------
+        self.mode_button = tk.Button(
+            self.root,
+            text="Mode: Envelope",
+            command=self.toggle_mode
+        )
+        self.mode_button.pack()
+
+        # -------------------
         # CANVAS
         # -------------------
         self.canvas = tk.Canvas(self.root, width=400, height=400, bg="black")
@@ -82,6 +92,14 @@ class GUI:
 
     def set_tilt(self, v):
         self.state.magnetic_tilt = v
+
+    def toggle_mode(self):
+        self.state.synthesis_mode = 1 if self.state.synthesis_mode == 0 else 0
+
+        if self.state.synthesis_mode == 0:
+            self.mode_button.config(text="Mode: Envelope")
+        else:
+            self.mode_button.config(text="Mode: Spectral")
 
     # -------------------
     # INPUT
@@ -260,6 +278,14 @@ class GUI:
                 p["radius"] * np.sin(p["angle"]),
                 0
             ])
+
+            spin_axis = np.array([0, 0, 1])
+
+            orbit = self.rotate_around_axis(
+                orbit,
+                spin_axis,
+                self.magnet_angle
+            )
 
             orbit = self.rotate(orbit)
 

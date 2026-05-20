@@ -22,3 +22,6 @@ class SynthState:
         self.noise_level = 0.5
         
         self.world_scale = 1.0
+
+        #Parámetros de witch de modos
+        self.synthesis_mode = 0  # 0 = Envelope, 1 = Spectral
